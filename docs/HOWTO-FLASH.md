@@ -65,7 +65,7 @@ If the check doesn't print `OK`, write the card again or use another card.
 
 | How | What to do |
 |---|---|
-| Ethernet | `ssh respeaker@respeaker.local` (or the board's IP from your router) |
+| Ethernet | `ssh respeaker@respeaker.local` (or the board's IP from your router). The image includes an SSH server (OpenSSH), enabled by default. |
 | HDMI | a login prompt appears on the screen |
 | Serial | open the adapter's port at 115200, press Enter |
 

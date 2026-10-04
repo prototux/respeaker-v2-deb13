@@ -180,7 +180,9 @@ Other ways to write the eMMC:
   connected (the PHY is powered down otherwise, and the controller cannot
   start without it).
 - **HDMI:** a login prompt on tty1.
-- **Network:** Ethernet uses DHCP. Then `ssh respeaker@respeaker.local`.
+- **Network:** Ethernet uses DHCP. The image includes an SSH server
+  (OpenSSH, enabled by default; its host keys are created on the first boot),
+  so `ssh respeaker@respeaker.local` works from another computer.
 - **Wi-Fi:** `nmtui`, or `nmcli dev wifi connect SSID password PASS` (no sudo
   needed for members of the `netdev` group, which includes the default user).
 
