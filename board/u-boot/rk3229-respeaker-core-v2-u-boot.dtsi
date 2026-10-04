@@ -1,0 +1,47 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * U-Boot additions for the ReSpeaker Core v2. Included automatically after
+ * rk3229-respeaker-core-v2.dts when building U-Boot.
+ */
+
+#include "rk322x-u-boot.dtsi"
+
+/ {
+	chosen {
+		/*
+		 * Load U-Boot proper from wherever the boot ROM found the SPL;
+		 * fall back to SD, then eMMC.
+		 */
+		u-boot,spl-boot-order = "same-as-spl", &sdmmc, &emmc;
+	};
+};
+
+/*
+ * DDR3 controller/PHY timings for the frequency selected with DDR_FREQ
+ * (board/u-boot/dmc/ddr3-<MHz>.dtsi, copied here by the build). The DRAM
+ * geometry (1 GiB on this board) is probed at runtime by the TPL, so no
+ * Rockchip binary DDR blob is needed.
+ */
+#include "rk3229-respeaker-core-v2-dmc.dtsi"
+
+&emmc {
+	bootph-all;
+};
+
+&sdmmc {
+	bootph-all;
+};
+
+&uart2 {
+	bootph-all;
+};
+
+/*
+ * U-Boot never boots from the Wi-Fi chip's SDIO bus, and the chip is powered
+ * down until Linux raises WL_REG_ON, so probing it only fails with "Card did
+ * not respond to voltage select! : -110". U-Boot's device tree only: Linux
+ * gets the full one from /boot.
+ */
+&sdio {
+	status = "disabled";
+};

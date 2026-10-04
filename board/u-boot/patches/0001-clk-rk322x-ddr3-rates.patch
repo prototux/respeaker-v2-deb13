@@ -1,0 +1,36 @@
+From: ReSpeaker Core v2 image builder
+Subject: [PATCH] clk: rockchip: rk322x: support DDR3 at 600, 666, 786 and 800 MHz
+
+The DPLL table only knew 400, 600 and 800 MHz (DDR 200/300/400 MHz); any
+other rate left dpll_cfg uninitialized. Add the rates needed to run DDR3
+at its rated speed, and reject unknown ones.
+
+diff --git a/drivers/clk/rockchip/clk_rk322x.c b/drivers/clk/rockchip/clk_rk322x.c
+index 9b71fd86..912b44c9 100644
+--- a/drivers/clk/rockchip/clk_rk322x.c
++++ b/drivers/clk/rockchip/clk_rk322x.c
+@@ -338,6 +338,24 @@ static int rk322x_ddr_set_clk(struct rk322x_cru *cru, unsigned int set_rate)
+ 		dpll_cfg = (struct pll_div)
+ 		{.refdiv = 1, .fbdiv = 100, .postdiv1 = 3, .postdiv2 = 1};
+ 		break;
++	case 1200*MHz:	/* DDR 600MHz */
++		dpll_cfg = (struct pll_div)
++		{.refdiv = 1, .fbdiv = 50, .postdiv1 = 1, .postdiv2 = 1};
++		break;
++	case 1332*MHz:	/* DDR 666MHz */
++		dpll_cfg = (struct pll_div)
++		{.refdiv = 2, .fbdiv = 111, .postdiv1 = 1, .postdiv2 = 1};
++		break;
++	case 1572*MHz:	/* DDR 786MHz */
++		dpll_cfg = (struct pll_div)
++		{.refdiv = 2, .fbdiv = 131, .postdiv1 = 1, .postdiv2 = 1};
++		break;
++	case 1600*MHz:	/* DDR 800MHz */
++		dpll_cfg = (struct pll_div)
++		{.refdiv = 3, .fbdiv = 200, .postdiv1 = 1, .postdiv2 = 1};
++		break;
++	default:
++		return -EINVAL;
+ 	}
+ 
+ 	/* pll enter slow-mode */
