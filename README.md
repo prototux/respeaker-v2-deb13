@@ -151,8 +151,8 @@ Other ways to write the eMMC:
 - From U-Boot's prompt (serial console, press a key during the 2 s countdown):
   `ums 0 mmc 0` exposes the eMMC as a USB drive on the OTG port, so you can `dd`
   the image from a PC. This is only available once this image's bootloader runs.
-- Unbootable eMMC loader: the board has no maskrom or recovery button, and
-  the boot ROM always prefers a loader on the eMMC. Make the eMMC unreadable
+- Unbootable eMMC loader: the board has no recovery button, and the boot ROM
+  always prefers a loader on the eMMC. Make the eMMC unreadable
   at power-on and the ROM falls back to the SD card. One way that worked: on
   the back (top right, inside the LED ring between LED 1 and MIC2) there is a
   row of eight small resistors, and just below it a small capacitor mounted
@@ -163,14 +163,6 @@ Other ways to write the eMMC:
   **At your own risk:** there is no schematic for this board, so what that
   pad actually shorts is unknown. Do it only during power-on, as briefly as
   possible.
-- Maskrom mode: same trick without an SD card inserted. With the OTG port
-  plugged into your PC, `rkdeveloptool ld` then shows `Maskrom`. Then run
-  `rkdeveloptool db rk322x_loader_v1.10.256.bin; rkdeveloptool wl 0 image.img; rkdeveloptool rd`.
-  To repair only the bootloader and keep the installed system, write
-  `u-boot-rockchip.bin` instead: `rkdeveloptool wl 64 u-boot-rockchip.bin`.
-  The USB loader is built from Rockchip's
-  [rkbin](https://github.com/rockchip-linux/rkbin):
-  `tools/boot_merger RKBOOT/RK322XMINIALL.ini`.
 
 ## First login
 
