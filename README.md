@@ -284,12 +284,16 @@ alsamixer                                   # output volume (F3), mic gains (F4)
 `Playback Volume` is the codec's output gain (−17.25 to +6 dB). The levels start at the values
 Seeed's image shipped with (`/var/lib/alsa/asound.state`): microphones at +33 dB
 digital gain and 0 dB analog, output at −1.5 dB. No PulseAudio/PipeWire is installed, and plain ALSA programs work.
+[`examples/micview.py`](examples/README.md#mic-view) shows the microphones live
+in a browser, with the direction of the loudest sound.
 
 ### LED ring
 
 The 12 APA102 LEDs are on `/dev/spidev0.1`. Their power switch is the GPIO line
 named `LED_PWR_N` (gpiochip2 line 2, active low). Users in the `spi` and `gpio`
 groups can drive both; the default user is in those groups.
+[`examples/ringstudio.py`](examples/README.md#ring-studio) is a web UI with
+90+ patterns for it.
 
 ## Known harmless log messages
 
@@ -338,6 +342,7 @@ drivers/ac108/           AC108 ADC driver (out of tree)
 rootfs/packages.env      Debian packages
 rootfs/overlay/          files copied into the image
 docs/HOWTO-FLASH.md      step-by-step guide for flashing a board
+examples/                LED ring and microphone web apps (see its README)
 ```
 
 ## License
