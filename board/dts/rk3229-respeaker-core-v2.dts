@@ -1,0 +1,710 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Seeed ReSpeaker Core v2.0
+ *
+ * Rewritten for mainline from the vendor (Rockchip 4.4 kernel) device tree.
+ * Used by both U-Boot and Linux.
+ */
+
+/dts-v1/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+#include <dt-bindings/pinctrl/rockchip.h>
+#include "rk3229.dtsi"
+
+/* Added to the clock bindings by the RK3228 codec kernel patch */
+#ifndef PCLK_ACODECPHY
+#define PCLK_ACODECPHY		368
+#endif
+
+/ {
+	model = "Seeed ReSpeaker Core v2.0";
+	compatible = "seeed,respeaker-core-v2", "rockchip,rk3229";
+
+	aliases {
+		/* fixed numbering: eMMC is always mmcblk0, the SD card mmcblk1 */
+		mmc0 = &emmc;
+		mmc1 = &sdmmc;
+		mmc2 = &sdio;
+		ethernet0 = &gmac;
+		/* fixed bus numbers; the HDMI DDC bus gets the next free one */
+		i2c0 = &i2c0;	/* PMIC */
+		i2c1 = &i2c1;	/* AC108s */
+		i2c2 = &i2c2;	/* Grove port: /dev/i2c-2 */
+	};
+
+	chosen {
+		stdout-path = "serial2:115200n8";
+	};
+
+	memory@60000000 {
+		device_type = "memory";
+		reg = <0x60000000 0x40000000>;
+	};
+
+	reserved-memory {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		/*
+		 * Secure world: OP-TEE uses 0x68400000-0x686fffff; the factory
+		 * Rockchip TEE (when booted by the original eMMC loader) up to
+		 * 0x691fffff.
+		 */
+		tee@68400000 {
+			reg = <0x68400000 0xe00000>;
+			no-map;
+		};
+	};
+
+	/* Internal codec: stereo DAC for the headphone jack and speaker */
+	codec: codec@12010000 {
+		compatible = "rockchip,rk3228-codec";
+		reg = <0x12010000 0x1000>;
+		clocks = <&cru SCLK_I2S_OUT>, <&cru PCLK_ACODECPHY>, <&cru SCLK_I2S1>;
+		clock-names = "mclk", "pclk", "sclk";
+		#sound-dai-cells = <0>;
+		spk-en-gpios = <&gpio1 RK_PA3 GPIO_ACTIVE_HIGH>;
+	};
+
+	gpio-keys {
+		compatible = "gpio-keys";
+		pinctrl-names = "default";
+		pinctrl-0 = <&user_key>;
+
+		key-user {
+			label = "User Key";
+			gpios = <&gpio3 RK_PD1 GPIO_ACTIVE_LOW>;
+			linux,code = <BTN_0>;
+			debounce-interval = <100>;
+			wakeup-source;
+		};
+	};
+
+	leds {
+		compatible = "gpio-leds";
+		pinctrl-names = "default";
+		pinctrl-0 = <&led_pins>;
+
+		led-0 {
+			label = "respeaker2:blue:state1";
+			gpios = <&gpio1 RK_PA7 GPIO_ACTIVE_LOW>;
+			linux,default-trigger = "heartbeat";
+		};
+
+		led-1 {
+			label = "respeaker2:blue:state2";
+			gpios = <&gpio3 RK_PC5 GPIO_ACTIVE_LOW>;
+			linux,default-trigger = "mmc0";
+		};
+	};
+
+	/*
+	 * Same layout as the vendor image, card id "seeed8micvoicec":
+	 *   hw:0,0  capture, 8 channels: 6 microphones + 2 playback loopback
+	 *   hw:0,1  playback, stereo, headphone jack and speaker
+	 * Both links share I2S1, so both directions run at the same rate.
+	 */
+	sound {
+		compatible = "simple-audio-card";
+		simple-audio-card,name = "seeed-8mic-voicecard";
+		simple-audio-card,mclk-fs = <256>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		simple-audio-card,dai-link@0 {
+			reg = <0>;
+			format = "i2s";
+			capture-only;
+
+			cpu {
+				sound-dai = <&i2s1>;
+			};
+
+			/* ac108_0 also drives ac108_1, see below */
+			codec {
+				sound-dai = <&ac108_0>;
+			};
+		};
+
+		simple-audio-card,dai-link@1 {
+			reg = <1>;
+			format = "i2s";
+			playback-only;
+
+			cpu {
+				sound-dai = <&i2s1>;
+			};
+
+			codec {
+				sound-dai = <&codec>;
+			};
+		};
+	};
+
+	sdio_pwrseq: sdio-pwrseq {
+		compatible = "mmc-pwrseq-simple";
+		clocks = <&rk805 1>;
+		clock-names = "ext_clock";
+		pinctrl-names = "default";
+		pinctrl-0 = <&wifi_enable_h>;
+		reset-gpios = <&gpio2 RK_PD2 GPIO_ACTIVE_LOW>;
+	};
+
+	vcc_sys: regulator-vcc-sys {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc_sys";
+		regulator-always-on;
+		regulator-boot-on;
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+	};
+
+	vcc_host: regulator-vcc-host {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc_host";
+		enable-active-high;
+		gpio = <&gpio3 RK_PC4 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&host_vbus_drv>;
+		regulator-always-on;
+		regulator-boot-on;
+		vin-supply = <&vcc_sys>;
+	};
+
+	vcc_otg_vbus: regulator-vcc-otg-vbus {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc_otg_vbus";
+		enable-active-high;
+		gpio = <&gpio3 RK_PC6 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&otg_vbus_drv>;
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		vin-supply = <&vcc_sys>;
+	};
+
+	vcc_phy: regulator-vcc-phy {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc_phy";
+		regulator-always-on;
+		regulator-boot-on;
+		vin-supply = <&vcc_io>;
+	};
+};
+
+/*
+ * rk3229.dtsi goes up to 1.464 GHz at 1.40 V. The vendor firmware never
+ * exceeds 1.35 V and Armbian stops at 1.2 GHz on RK322x; the higher points
+ * cause random crashes, so they are removed.
+ */
+&cpu0_opp_table {
+	/delete-node/ opp-1296000000;
+	/delete-node/ opp-1392000000;
+	/delete-node/ opp-1464000000;
+};
+
+/*
+ * With the 3 highest points removed, cpufreq has 5 cooling states (0-4).
+ * rk322x.dtsi limits the 70 C trip to state 6 (600 MHz in its 8-point
+ * table), which no longer exists and fails the binding; 600 MHz is state 3.
+ */
+&cpu_thermal {
+	cooling-maps {
+		map0 {
+			cooling-device =
+				<&cpu0 THERMAL_NO_LIMIT 3>,
+				<&cpu1 THERMAL_NO_LIMIT 3>,
+				<&cpu2 THERMAL_NO_LIMIT 3>,
+				<&cpu3 THERMAL_NO_LIMIT 3>;
+		};
+	};
+};
+
+&cpu0 {
+	cpu-supply = <&vdd_arm>;
+};
+
+&cpu1 {
+	cpu-supply = <&vdd_arm>;
+};
+
+&cpu2 {
+	cpu-supply = <&vdd_arm>;
+};
+
+&cpu3 {
+	cpu-supply = <&vdd_arm>;
+};
+
+&emmc {
+	cap-mmc-highspeed;
+	non-removable;
+	disable-wp;
+	status = "okay";
+};
+
+&gmac {
+	assigned-clocks = <&cru SCLK_MAC_SRC>;
+	assigned-clock-rates = <50000000>;
+	clock_in_out = "output";
+	phy-handle = <&phy>;
+	phy-mode = "rmii";
+	phy-supply = <&vcc_phy>;
+	status = "okay";
+
+	mdio {
+		compatible = "snps,dwmac-mdio";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		phy: ethernet-phy@0 {
+			compatible = "ethernet-phy-id1234.d400",
+				     "ethernet-phy-ieee802.3-c22";
+			reg = <0>;
+			clocks = <&cru SCLK_MAC_PHY>;
+			phy-is-integrated;
+			resets = <&cru SRST_MACPHY>;
+		};
+	};
+};
+
+&gpu {
+	mali-supply = <&vdd_log>;
+	status = "okay";
+};
+
+/*
+ * The HDMI controller (with its HDCP engine) sits behind the VIO bus
+ * (pclk_hdmi_ctrl comes from hclk_vio_pre, the VIO domain holds the HDCP
+ * clocks), but rk322x.dtsi doesn't say so. Linux then idles VIO at boot
+ * and the first HDMI register read stalls the bus forever. RK3288 has the
+ * same layout and its HDMI node is in PD_VIO.
+ */
+&hdmi {
+	power-domains = <&power RK3228_PD_VIO>;
+	status = "okay";
+};
+
+&hdmi_phy {
+	status = "okay";
+};
+
+&i2c0 {
+	status = "okay";
+
+	rk805: pmic@18 {
+		compatible = "rockchip,rk805";
+		reg = <0x18>;
+		interrupt-parent = <&gpio1>;
+		interrupts = <RK_PB4 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pmic_int_l>;
+		#clock-cells = <1>;
+		clock-output-names = "xin32k", "rk805-clkout2";
+		system-power-controller;
+		wakeup-source;
+
+		vcc1-supply = <&vcc_sys>;
+		vcc2-supply = <&vcc_sys>;
+		vcc3-supply = <&vcc_sys>;
+		vcc4-supply = <&vcc_sys>;
+		vcc5-supply = <&vcc_io>;
+		vcc6-supply = <&vcc_io>;
+
+		regulators {
+			vdd_arm: DCDC_REG1 {
+				regulator-name = "vdd_arm";
+				/* forced PWM, as the vendor kernel: steadier under load steps */
+				regulator-initial-mode = <1>;
+				regulator-min-microvolt = <712500>;
+				regulator-max-microvolt = <1350000>;
+				regulator-ramp-delay = <12500>;
+				regulator-always-on;
+				regulator-boot-on;
+				regulator-state-mem {
+					regulator-on-in-suspend;
+					regulator-suspend-microvolt = <950000>;
+				};
+			};
+
+			/*
+			 * Also supplies the DRAM controller: the vendor runs
+			 * DDR3 at 600 MHz with at least 1.10 V here.
+			 */
+			vdd_log: DCDC_REG2 {
+				regulator-name = "vdd_log";
+				/* forced PWM, as the vendor kernel: steadier under load steps */
+				regulator-initial-mode = <1>;
+				regulator-min-microvolt = <1100000>;
+				regulator-max-microvolt = <1150000>;
+				regulator-ramp-delay = <12500>;
+				regulator-always-on;
+				regulator-boot-on;
+				regulator-state-mem {
+					regulator-on-in-suspend;
+					regulator-suspend-microvolt = <1000000>;
+				};
+			};
+
+			vcc_ddr: DCDC_REG3 {
+				regulator-name = "vcc_ddr";
+				regulator-always-on;
+				regulator-boot-on;
+				regulator-state-mem {
+					regulator-on-in-suspend;
+				};
+			};
+
+			vcc_io: DCDC_REG4 {
+				regulator-name = "vcc_io";
+				regulator-min-microvolt = <3300000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-always-on;
+				regulator-boot-on;
+				regulator-state-mem {
+					regulator-on-in-suspend;
+					regulator-suspend-microvolt = <3300000>;
+				};
+			};
+
+			vcc_18: LDO_REG1 {
+				regulator-name = "vcc_18";
+				regulator-min-microvolt = <1800000>;
+				regulator-max-microvolt = <1800000>;
+				regulator-always-on;
+				regulator-boot-on;
+				regulator-state-mem {
+					regulator-on-in-suspend;
+					regulator-suspend-microvolt = <1800000>;
+				};
+			};
+
+			vcc_18emmc: LDO_REG2 {
+				regulator-name = "vcc_18emmc";
+				regulator-min-microvolt = <1800000>;
+				regulator-max-microvolt = <1800000>;
+				regulator-always-on;
+				regulator-boot-on;
+				regulator-state-mem {
+					regulator-on-in-suspend;
+					regulator-suspend-microvolt = <1800000>;
+				};
+			};
+
+			vdd_10: LDO_REG3 {
+				regulator-name = "vdd_10";
+				regulator-min-microvolt = <1000000>;
+				regulator-max-microvolt = <1000000>;
+				regulator-always-on;
+				regulator-boot-on;
+				regulator-state-mem {
+					regulator-on-in-suspend;
+					regulator-suspend-microvolt = <1000000>;
+				};
+			};
+		};
+	};
+};
+
+/*
+ * Two AC108 quad ADCs. Each sends two stereo I2S lanes, received on
+ * I2S1 SDI0-SDI3: 8 channels. simple-audio-card has one codec per link, so
+ * ac108_0 is the codec and drives ac108_1 too (x-powers,secondary-chips).
+ */
+&i2c1 {
+	status = "okay";
+
+	ac108_0: audio-codec@3b {
+		compatible = "x-powers,ac108";
+		reg = <0x3b>;
+		#sound-dai-cells = <0>;
+		/* Gates BCLK to the ADCs, raised while capturing */
+		bclk-en-gpios = <&gpio0 RK_PB3 GPIO_ACTIVE_HIGH>;
+		x-powers,secondary-chips = <&ac108_1>;
+	};
+
+	ac108_1: audio-codec@35 {
+		compatible = "x-powers,ac108";
+		reg = <0x35>;
+		x-powers,channel-base = <4>;
+	};
+};
+
+/*
+ * Grove connector (GPIO2_C4/C5). The board has no pull-ups on it (Grove
+ * modules bring their own): enable the SoC's weak internal ones, so that the
+ * bus idles high with nothing plugged in.
+ */
+&i2c2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c2_xfer_pull_up>;
+	status = "okay";
+};
+
+&i2s1 {
+	#sound-dai-cells = <0>;
+	/* GPIO0_B3 (LRCK_RX in the default group) is the AC108 BCLK gate here */
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2s1_bus_respeaker>;
+	rockchip,playback-channels = <2>;
+	rockchip,capture-channels = <8>;
+	status = "okay";
+};
+
+&io_domains {
+	vccio1-supply = <&vcc_io>;
+	vccio2-supply = <&vcc_io>;
+	vccio4-supply = <&vcc_io>;
+	status = "okay";
+};
+
+&iep_mmu {
+	status = "okay";
+};
+
+&gpio2 {
+	/* Power switch of the 12 RGB LEDs, active low */
+	gpio-line-names = "", "", "LED_PWR_N";
+};
+
+&pinctrl {
+	bt {
+		uart11_xfer: uart11-xfer {
+			rockchip,pins = <3 RK_PB6 1 &pcfg_pull_up>,
+					<3 RK_PB5 1 &pcfg_pull_none>;
+		};
+
+		uart11_cts: uart11-cts {
+			rockchip,pins = <3 RK_PA7 1 &pcfg_pull_none>;
+		};
+
+		uart11_rts: uart11-rts {
+			rockchip,pins = <3 RK_PA6 1 &pcfg_pull_none>;
+		};
+	};
+
+	i2c2 {
+		i2c2_xfer_pull_up: i2c2-xfer-pull-up {
+			rockchip,pins = <2 RK_PC4 1 &pcfg_pull_up>,
+					<2 RK_PC5 1 &pcfg_pull_up>;
+		};
+	};
+
+	i2s1 {
+		i2s1_bus_respeaker: i2s1-bus-respeaker {
+			rockchip,pins = <0 RK_PB0 1 &pcfg_pull_none>,
+					<0 RK_PB1 1 &pcfg_pull_none>,
+					<0 RK_PB4 1 &pcfg_pull_none>,
+					<0 RK_PB5 1 &pcfg_pull_none>,
+					<0 RK_PB6 1 &pcfg_pull_none>,
+					<1 RK_PA2 2 &pcfg_pull_none>,
+					<1 RK_PA4 2 &pcfg_pull_none>,
+					<1 RK_PA5 2 &pcfg_pull_none>;
+		};
+	};
+
+	keys {
+		user_key: user-key {
+			rockchip,pins = <3 RK_PD1 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+	};
+
+	leds {
+		led_pins: led-pins {
+			rockchip,pins = <1 RK_PA7 RK_FUNC_GPIO &pcfg_pull_none>,
+					<3 RK_PC5 RK_FUNC_GPIO &pcfg_pull_none>;
+		};
+	};
+
+	pmic {
+		pmic_int_l: pmic-int-l {
+			rockchip,pins = <1 RK_PB4 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+	};
+
+	sdio-pwrseq {
+		wifi_enable_h: wifi-enable-h {
+			rockchip,pins = <2 RK_PD2 RK_FUNC_GPIO &pcfg_pull_none>;
+		};
+	};
+
+	usb {
+		host_vbus_drv: host-vbus-drv {
+			rockchip,pins = <3 RK_PC4 RK_FUNC_GPIO &pcfg_pull_none>;
+		};
+
+		otg_vbus_drv: otg-vbus-drv {
+			rockchip,pins = <3 RK_PC6 RK_FUNC_GPIO &pcfg_pull_none>;
+		};
+	};
+};
+
+&sdio {
+	bus-width = <4>;
+	cap-sd-highspeed;
+	cap-sdio-irq;
+	keep-power-in-suspend;
+	max-frequency = <50000000>;
+	mmc-pwrseq = <&sdio_pwrseq>;
+	no-mmc;
+	no-sd;
+	non-removable;
+	status = "okay";
+};
+
+&sdmmc {
+	bus-width = <4>;
+	cap-sd-highspeed;
+	cd-gpios = <&gpio1 RK_PC1 GPIO_ACTIVE_LOW>;
+	disable-wp;
+	max-frequency = <50000000>;
+	status = "okay";
+};
+
+/*
+ * The 12 APA102 RGB LEDs, on chip select 1: /dev/spidev0.1. SPI0 uses its
+ * alternate ("spi1") pin set; CS0 is not muxed as its pin (GPIO2_A2) is the
+ * LED power switch.
+ */
+&spi0 {
+	num-cs = <2>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi1_clk &spi1_tx &spi1_rx &spi1_cs1>;
+	status = "okay";
+
+	spidev@1 {
+		compatible = "rohm,dh2228fv";
+		reg = <1>;
+		spi-max-frequency = <8000000>;
+	};
+};
+
+&tsadc {
+	rockchip,hw-tshut-mode = <0>;
+	status = "okay";
+};
+
+&u2phy0 {
+	status = "okay";
+};
+
+&u2phy0_host {
+	phy-supply = <&vcc_host>;
+	status = "okay";
+};
+
+/*
+ * The OTG port is used as a device (gadget) by default, so its VBUS switch
+ * (vcc_otg_vbus) is left off.
+ */
+&u2phy0_otg {
+	status = "okay";
+};
+
+&u2phy1 {
+	status = "okay";
+};
+
+&u2phy1_host {
+	phy-supply = <&vcc_host>;
+	status = "okay";
+};
+
+&u2phy1_otg {
+	phy-supply = <&vcc_host>;
+	status = "okay";
+};
+
+/*
+ * UART0 stays disabled: its pins (GPIO2_D2/D3) include WL_REG_ON, the
+ * Wi-Fi power enable used by sdio_pwrseq.
+ */
+
+/* AP6212 Bluetooth */
+&uart1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart11_xfer &uart11_cts &uart11_rts>;
+	uart-has-rtscts;
+	status = "okay";
+
+	/*
+	 * No device-wakeup/host-wakeup GPIOs (GPIO3_D3/GPIO3_D2): with them the
+	 * driver lets the chip sleep, which the vendor image never did, and it
+	 * stops answering after its firmware patch is loaded.
+	 */
+	bluetooth {
+		compatible = "brcm,bcm43438-bt";
+		clocks = <&rk805 1>;
+		clock-names = "lpo";
+		shutdown-gpios = <&gpio2 RK_PD5 GPIO_ACTIVE_HIGH>;
+		max-speed = <1500000>;
+	};
+};
+
+/* Debug console */
+&uart2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart21_xfer>;
+	status = "okay";
+};
+
+/*
+ * Reset lines of the USB controllers, so the drivers reset them at probe:
+ * the bootloader may leave them unusable otherwise (seen on the OTG port as
+ * "dwc2_core_reset: HANG! Soft Reset timeout"). From Armbian's RK322x port.
+ */
+&usb_host0_ehci {
+	resets = <&cru SRST_USBHOST0>;
+	reset-names = "ehci";
+	status = "okay";
+};
+
+&usb_host0_ohci {
+	status = "okay";
+};
+
+&usb_host1_ehci {
+	resets = <&cru SRST_USBHOST1>;
+	reset-names = "ehci";
+	status = "okay";
+};
+
+&usb_host1_ohci {
+	status = "okay";
+};
+
+&usb_host2_ehci {
+	resets = <&cru SRST_USBHOST2>;
+	reset-names = "ehci";
+	status = "okay";
+};
+
+&usb_host2_ohci {
+	status = "okay";
+};
+
+&usb_otg {
+	dr_mode = "otg";
+	resets = <&cru SRST_USBOTG>;
+	reset-names = "dwc2";
+	status = "okay";
+};
+
+&vop {
+	/* Pixel clock from the HDMI PHY, as on the other RK322x boards */
+	assigned-clocks = <&cru DCLK_VOP>;
+	assigned-clock-parents = <&cru SCLK_HDMI_PHY>;
+	status = "okay";
+};
+
+&vop_mmu {
+	status = "okay";
+};
+
+&wdt {
+	status = "okay";
+};
