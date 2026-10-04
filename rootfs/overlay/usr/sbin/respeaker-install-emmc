@@ -1,0 +1,122 @@
+#!/bin/sh
+# Install this system on the internal eMMC.
+#
+#   respeaker-install-emmc              copy the running system (booted from SD)
+#   respeaker-install-emmc IMAGE        write an image file (.img or .img.xz)
+#   respeaker-install-emmc --bootloader only rewrite the bootloader
+#
+# Everything on the eMMC, including the factory system, is erased (except
+# with --bootloader, which keeps the installed system).
+set -eu
+
+UBOOT=/usr/lib/u-boot/respeaker-core-v2/u-boot-rockchip.bin
+
+die() { echo "error: $*" >&2; exit 1; }
+
+[ "$(id -u)" = 0 ] || die "must be run as root"
+
+assume_yes=0
+bootloader_only=0
+image=
+for arg in "$@"; do
+	case "$arg" in
+		-y|--yes) assume_yes=1 ;;
+		-b|--bootloader) bootloader_only=1 ;;
+		-h|--help) sed -n '2,10s/^# \{0,1\}//p' "$0"; exit 0 ;;
+		-*) die "unknown option $arg" ;;
+		*) image=$arg ;;
+	esac
+done
+
+emmc=
+for d in /sys/block/mmcblk*; do
+	# the eMMC's hardware boot partitions (mmcblkXbootN) share its device
+	case "${d##*/}" in *boot*|*rpmb*) continue ;; esac
+	case "$(readlink -f "$d/device")" in
+		*/30020000.mmc/*) emmc=/dev/${d##*/} ;;
+	esac
+done
+[ -n "$emmc" ] || die "eMMC not found"
+
+# Rewriting only the bootloader is safe even when running from the eMMC: it
+# lives before the first partition.
+[ "$bootloader_only" = 0 ] || [ -z "$image" ] || die "--bootloader takes no image"
+
+if [ "$bootloader_only" = 1 ]; then
+	echo "writing the bootloader to $emmc (the installed system is kept)"
+	dd if="$UBOOT" of="$emmc" bs=512 seek=64 conv=notrunc,fsync status=none
+	echo "done"
+	exit 0
+fi
+
+root_src=$(readlink -f "$(findmnt -n -o SOURCE /)")
+case "$root_src" in
+	"$emmc"*) die "the system is running from the eMMC, boot from an SD card first" ;;
+esac
+[ -z "$image" ] || [ -f "$image" ] || die "$image: no such file"
+
+if [ "$assume_yes" != 1 ]; then
+	echo "This erases EVERYTHING on the eMMC ($emmc)."
+	printf 'Type "yes" to continue: '
+	read -r answer
+	[ "$answer" = yes ] || die "aborted"
+fi
+
+# The progress lines are redrawn in place; a blinking cursor jumping along
+# them makes them hard to read on a serial console, so hide it meanwhile.
+mnt=
+cleanup() {
+	if [ -t 1 ]; then printf '\033[?25h'; fi
+	if [ -n "$mnt" ]; then
+		umount "$mnt" 2>/dev/null || true
+		rmdir "$mnt"
+	fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+if [ -t 1 ]; then printf '\033[?25l'; fi
+
+for p in "$emmc"p*; do
+	[ -e "$p" ] && umount "$p" 2>/dev/null || true
+done
+
+if [ -n "$image" ]; then
+	echo "writing $image to $emmc"
+	xzcat -f "$image" | dd of="$emmc" bs=4M iflag=fullblock oflag=direct conv=fsync status=progress
+	# The image grows itself to the whole eMMC on its first boot.
+	sync
+	echo "done: power off, remove the SD card and power on again"
+	exit 0
+fi
+
+echo "partitioning $emmc"
+# Same layout as the image: the bootloader area (sectors 64-32767) as a
+# placeholder partition, then the root filesystem.
+wipefs -q -a "$emmc"
+sfdisk -q "$emmc" <<EOF
+label: gpt
+first-lba: 64
+start=64, size=32704, type=8DA63339-0007-60C0-C436-083AC8230908, name=loader
+start=32768, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name=rootfs, attrs=LegacyBIOSBootable
+EOF
+
+echo "writing the bootloader"
+dd if="$UBOOT" of="$emmc" bs=512 seek=64 conv=notrunc,fsync status=none
+
+partx -u "$emmc"
+udevadm settle
+root=${emmc}p2
+echo "creating the root filesystem on $root"
+mkfs.ext4 -q -F -L rootfs "$root"
+
+mnt=$(mktemp -d)
+mount "$root" "$mnt"
+echo "copying the system (this takes a few minutes)"
+rsync -aHAXx --numeric-ids --info=progress2 \
+	--exclude=/dev/ --exclude=/proc/ --exclude=/sys/ --exclude=/run/ \
+	--exclude=/tmp/ --exclude=/mnt/ --exclude=/media/ --exclude=/lost+found \
+	/ "$mnt/"
+mkdir -p "$mnt/dev" "$mnt/proc" "$mnt/sys" "$mnt/run" "$mnt/tmp" "$mnt/mnt" "$mnt/media"
+chmod 1777 "$mnt/tmp"
+sync
+echo "done: power off, remove the SD card and power on again"
