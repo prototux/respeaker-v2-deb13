@@ -1,0 +1,131 @@
+From: ReSpeaker Core v2 image builder
+Subject: [PATCH] ASoC: rk3228: add a Playback Volume control
+
+The driver wrote a fixed headphone/line output gain on every stream open
+(and 0 on close, to avoid pops), so the output level could not be changed
+and the card had no playback control at all. Expose the HPOUT gain as
+"Playback Volume" (-17.25 dB to +6 dB, as in Rockchip's own driver) and
+apply the chosen level when playback starts.
+
+--- a/sound/soc/codecs/rk3228_codec.c
++++ b/sound/soc/codecs/rk3228_codec.c
+@@ -15,6 +15,7 @@
+ #include <linux/regmap.h>
+ #include <sound/pcm_params.h>
+ #include <sound/dmaengine_pcm.h>
++#include <sound/tlv.h>
+ #include "rk3228_codec.h"
+ 
+ /*
+@@ -34,6 +35,72 @@
+ 	struct clk *sclk;
+ 	struct gpio_desc *spk_en_gpio;
+ 	int spk_depop_time; /* msec */
++	unsigned int volume[2];	/* HPOUT gain, left/right */
++	bool playing;
++};
++
++/* HPOUT gain: -17.25 dB (0) to +6 dB (31), 0.75 dB steps */
++static const DECLARE_TLV_DB_SCALE(rk3228_out_tlv, -1725, 75, 0);
++
++static int rk3228_volume_info(struct snd_kcontrol *kcontrol,
++			      struct snd_ctl_elem_info *uinfo)
++{
++	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
++	uinfo->count = 2;
++	uinfo->value.integer.min = 0;
++	uinfo->value.integer.max = HPOUTL_GAIN_MASK;
++	return 0;
++}
++
++static int rk3228_volume_get(struct snd_kcontrol *kcontrol,
++			     struct snd_ctl_elem_value *ucontrol)
++{
++	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
++	struct rk3228_codec_priv *rk3228 = snd_soc_component_get_drvdata(component);
++
++	ucontrol->value.integer.value[0] = rk3228->volume[0];
++	ucontrol->value.integer.value[1] = rk3228->volume[1];
++	return 0;
++}
++
++/*
++ * The gain is ramped to 0 when playback stops (to avoid pops), so the
++ * user's setting is kept here and applied when playback starts.
++ */
++static int rk3228_volume_put(struct snd_kcontrol *kcontrol,
++			     struct snd_ctl_elem_value *ucontrol)
++{
++	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
++	struct rk3228_codec_priv *rk3228 = snd_soc_component_get_drvdata(component);
++	long l = ucontrol->value.integer.value[0];
++	long r = ucontrol->value.integer.value[1];
++	int changed;
++
++	if (l < 0 || l > HPOUTL_GAIN_MASK || r < 0 || r > HPOUTR_GAIN_MASK)
++		return -EINVAL;
++	changed = l != rk3228->volume[0] || r != rk3228->volume[1];
++	rk3228->volume[0] = l;
++	rk3228->volume[1] = r;
++	if (rk3228->playing) {
++		regmap_update_bits(rk3228->regmap, HPOUTL_GAIN_CTRL,
++				   HPOUTL_GAIN_MASK, l);
++		regmap_update_bits(rk3228->regmap, HPOUTR_GAIN_CTRL,
++				   HPOUTR_GAIN_MASK, r);
++	}
++	return changed;
++}
++
++static const struct snd_kcontrol_new rk3228_controls[] = {
++	{
++		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
++		.name = "Playback Volume",
++		.access = SNDRV_CTL_ELEM_ACCESS_READWRITE |
++			  SNDRV_CTL_ELEM_ACCESS_TLV_READ,
++		.tlv.p = rk3228_out_tlv,
++		.info = rk3228_volume_info,
++		.get = rk3228_volume_get,
++		.put = rk3228_volume_put,
++	},
+ };
+ 
+ static const struct reg_default rk3228_codec_reg_defaults[] = {
+@@ -216,9 +283,10 @@
+ 	rk3228_analog_output(rk3228, 1);
+ 
+ 	regmap_update_bits(rk3228->regmap, HPOUTL_GAIN_CTRL,
+-			   HPOUTL_GAIN_MASK, OUT_VOLUME);
++			   HPOUTL_GAIN_MASK, rk3228->volume[0]);
+ 	regmap_update_bits(rk3228->regmap, HPOUTR_GAIN_CTRL,
+-			   HPOUTR_GAIN_MASK, OUT_VOLUME);
++			   HPOUTR_GAIN_MASK, rk3228->volume[1]);
++	rk3228->playing = true;
+ 	return 0;
+ }
+ 
+@@ -256,6 +324,7 @@
+ 	struct rk3228_codec_priv *rk3228 = snd_soc_component_get_drvdata(component);
+ 	int i = 0;
+ 
++	rk3228->playing = false;
+ 	rk3228_analog_output(rk3228, 0);
+ 
+ 	regmap_update_bits(rk3228->regmap, HPOUTL_GAIN_CTRL,
+@@ -379,6 +448,8 @@
+ static struct snd_soc_component_driver soc_codec_dev_rk3228 = {
+ 	.probe = rk3228_codec_probe,
+ 	.remove = rk3228_codec_remove,
++	.controls = rk3228_controls,
++	.num_controls = ARRAY_SIZE(rk3228_controls),
+ };
+ 
+ static bool rk3228_codec_write_read_reg(struct device *dev, unsigned int reg)
+@@ -445,6 +516,8 @@
+ 	rk3228 = devm_kzalloc(&pdev->dev, sizeof(*rk3228), GFP_KERNEL);
+ 	if (!rk3228)
+ 		return -ENOMEM;
++	rk3228->volume[0] = OUT_VOLUME;
++	rk3228->volume[1] = OUT_VOLUME;
+ 
+ 	rk3228->mclk = devm_clk_get(&pdev->dev, "mclk");
+ 	if (PTR_ERR(rk3228->mclk) == -EPROBE_DEFER)

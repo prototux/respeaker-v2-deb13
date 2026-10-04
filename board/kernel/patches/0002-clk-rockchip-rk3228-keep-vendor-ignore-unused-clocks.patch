@@ -1,0 +1,46 @@
+From: ReSpeaker Core v2 image builder
+Subject: [PATCH] clk: rockchip: rk3228: keep clocks the vendor kernel never gates
+
+Some clocks have no consumer in mainline but must stay on, and Rockchip's
+own kernel marks them CLK_IGNORE_UNUSED. Without the flag, the unused-clock
+cleanup at the end of boot turns them off:
+
+- pclk_sim is the same gate bit as pclk_ddrphy (CLKGATE_CON10[3]): gating
+  it stops the DDR PHY's register clock, and the system crashes shortly
+  afterwards (timer list corruption right after clk_disable_unused).
+- hclk_vio_h2p/pclk_vio_h2p clock the VIO AHB-to-APB bridge in front of
+  the HDMI controller: once gated, every HDMI register reads as 0 and
+  dw-hdmi fails with "Unsupported HDMI controller (0000:00:00)".
+- pclk_vdacphy (TV-out DAC PHY), for parity with the vendor kernel.
+
+--- a/drivers/clk/rockchip/clk-rk3228.c
++++ b/drivers/clk/rockchip/clk-rk3228.c
+@@ -546,10 +546,10 @@
+ 	GATE(0, "hclk_vio_ahb_arbi", "hclk_vio_pre", 0, RK2928_CLKGATE_CON(13), 7, GFLAGS),
+ 	GATE(0, "hclk_vio_noc", "hclk_vio_pre", 0, RK2928_CLKGATE_CON(13), 8, GFLAGS),
+ 	GATE(0, "hclk_vop_noc", "hclk_vio_pre", 0, RK2928_CLKGATE_CON(13), 13, GFLAGS),
+-	GATE(HCLK_VIO_H2P, "hclk_vio_h2p", "hclk_vio_pre", 0, RK2928_CLKGATE_CON(14), 7, GFLAGS),
++	GATE(HCLK_VIO_H2P, "hclk_vio_h2p", "hclk_vio_pre", CLK_IGNORE_UNUSED, RK2928_CLKGATE_CON(14), 7, GFLAGS),
+ 	GATE(HCLK_HDCP_MMU, "hclk_hdcp_mmu", "hclk_vio_pre", 0, RK2928_CLKGATE_CON(14), 12, GFLAGS),
+ 	GATE(PCLK_HDMI_CTRL, "pclk_hdmi_ctrl", "hclk_vio_pre", 0, RK2928_CLKGATE_CON(14), 6, GFLAGS),
+-	GATE(PCLK_VIO_H2P, "pclk_vio_h2p", "hclk_vio_pre", 0, RK2928_CLKGATE_CON(14), 8, GFLAGS),
++	GATE(PCLK_VIO_H2P, "pclk_vio_h2p", "hclk_vio_pre", CLK_IGNORE_UNUSED, RK2928_CLKGATE_CON(14), 8, GFLAGS),
+ 	GATE(PCLK_HDCP, "pclk_hdcp", "hclk_vio_pre", 0, RK2928_CLKGATE_CON(14), 11, GFLAGS),
+ 
+ 	/* PD_PERI */
+@@ -617,12 +617,12 @@
+ 	GATE(PCLK_GRF, "pclk_grf", "pclk_cpu", CLK_IGNORE_UNUSED, RK2928_CLKGATE_CON(10), 0, GFLAGS),
+ 	GATE(0, "pclk_cru", "pclk_cpu", CLK_IGNORE_UNUSED, RK2928_CLKGATE_CON(10), 1, GFLAGS),
+ 	GATE(0, "pclk_sgrf", "pclk_cpu", CLK_IGNORE_UNUSED, RK2928_CLKGATE_CON(10), 2, GFLAGS),
+-	GATE(0, "pclk_sim", "pclk_cpu", 0, RK2928_CLKGATE_CON(10), 3, GFLAGS),
++	GATE(0, "pclk_sim", "pclk_cpu", CLK_IGNORE_UNUSED, RK2928_CLKGATE_CON(10), 3, GFLAGS),
+ 
+-	GATE(0, "pclk_ddrphy", "pclk_phy_pre", 0, RK2928_CLKGATE_CON(10), 3, GFLAGS),
++	GATE(0, "pclk_ddrphy", "pclk_phy_pre", CLK_IGNORE_UNUSED, RK2928_CLKGATE_CON(10), 3, GFLAGS),
+ 	GATE(PCLK_ACODECPHY, "pclk_acodecphy", "pclk_phy_pre", 0, RK2928_CLKGATE_CON(10), 5, GFLAGS),
+ 	GATE(PCLK_HDMI_PHY, "pclk_hdmiphy", "pclk_phy_pre", 0, RK2928_CLKGATE_CON(10), 7, GFLAGS),
+-	GATE(0, "pclk_vdacphy", "pclk_phy_pre", 0, RK2928_CLKGATE_CON(10), 8, GFLAGS),
++	GATE(0, "pclk_vdacphy", "pclk_phy_pre", CLK_IGNORE_UNUSED, RK2928_CLKGATE_CON(10), 8, GFLAGS),
+ 	GATE(0, "pclk_phy_noc", "pclk_phy_pre", 0, RK2928_CLKGATE_CON(10), 9, GFLAGS),
+ 
+ 	GATE(ACLK_VPU, "aclk_vpu", "aclk_vpu_pre", 0, RK2928_CLKGATE_CON(15), 0, GFLAGS),
