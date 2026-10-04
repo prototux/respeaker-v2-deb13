@@ -1,0 +1,33 @@
+#!/bin/sh
+# Expose a serial console (ttyGS0, 115200) on the micro-USB OTG port, like
+# the original image did.
+set -eu
+
+g=/sys/kernel/config/usb_gadget/respeaker
+[ -d "$g" ] && exit 0
+
+modprobe libcomposite
+
+mkdir "$g"
+cd "$g"
+echo 0x1d6b > idVendor		# Linux Foundation
+echo 0x0104 > idProduct		# Multifunction Composite Gadget
+echo 0x0100 > bcdDevice
+echo 0x0200 > bcdUSB
+
+mkdir strings/0x409
+echo "Seeed" > strings/0x409/manufacturer
+echo "ReSpeaker Core v2" > strings/0x409/product
+head -c 16 /etc/machine-id > strings/0x409/serialnumber
+
+mkdir configs/c.1 configs/c.1/strings/0x409
+echo "Serial console" > configs/c.1/strings/0x409/configuration
+echo 250 > configs/c.1/MaxPower
+
+mkdir functions/acm.usb0
+ln -s functions/acm.usb0 configs/c.1/
+
+# Bound to the controller only while a USB host is connected (see
+# usb-gadget-cable), from now on and on every plug/unplug.
+exec /usr/lib/respeaker/usb-gadget-cable
+

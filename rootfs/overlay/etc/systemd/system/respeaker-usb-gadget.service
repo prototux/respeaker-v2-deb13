@@ -1,0 +1,13 @@
+[Unit]
+Description=USB serial console on the OTG port
+After=sys-kernel-config.mount systemd-modules-load.service
+Wants=serial-getty@ttyGS0.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/respeaker/usb-gadget
+RemainAfterExit=yes
+TimeoutStartSec=30
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,32 @@
+#!/bin/sh
+# Bind the USB serial gadget to the OTG controller while a USB host (PC) is
+# connected to the OTG port, unbind it otherwise. Run at boot and by udev on
+# every cable event (61-respeaker-usb-gadget.rules).
+#
+# Without a cable, the USB PHY driver powers the OTG PHY down, which stops
+# the clock the dwc2 controller needs to reset: binding then fails with
+# "dwc2_core_reset: HANG! Soft Reset timeout" and the port stays dead. When a
+# host is plugged in, the PHY is powered up and the PHY's extcon device
+# reports USB=1: only then can the gadget be bound.
+set -eu
+
+g=/sys/kernel/config/usb_gadget/respeaker
+[ -d "$g" ] || exit 0
+
+exec 9>/run/respeaker-usb-gadget.lock
+flock 9
+
+connected=0
+for e in /sys/class/extcon/*; do
+	case "$(cat "$e/name" 2>/dev/null)" in
+		*usb2phy@760*) grep -qx 'USB=1' "$e/state" && connected=1 ;;
+	esac
+done
+
+udc=$(ls /sys/class/udc | head -n 1)
+bound=$(cat "$g/UDC")
+if [ "$connected" = 1 ] && [ -z "$bound" ] && [ -n "$udc" ]; then
+	echo "$udc" > "$g/UDC"
+elif [ "$connected" = 0 ] && [ -n "$bound" ]; then
+	echo "" > "$g/UDC"
+fi
