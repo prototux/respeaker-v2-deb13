@@ -1,0 +1,9 @@
+// Members of "netdev" (the default user is one) manage networking without
+// sudo: nmtui, nmcli. NetworkManager's own rule only covers local, active
+// sessions, which leaves out SSH and the serial console.
+polkit.addRule(function(action, subject) {
+	if (action.id.indexOf("org.freedesktop.NetworkManager.") == 0 &&
+	    subject.isInGroup("netdev")) {
+		return polkit.Result.YES;
+	}
+});

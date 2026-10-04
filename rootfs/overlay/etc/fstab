@@ -1,0 +1,3 @@
+# The root filesystem is mounted by the kernel (root= from the bootloader);
+# this entry only sets its mount options.
+/dev/root	/	ext4	defaults,noatime,commit=60	0	1

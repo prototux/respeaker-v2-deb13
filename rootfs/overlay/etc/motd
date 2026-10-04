@@ -1,0 +1,9 @@
+
+ ReSpeaker Core v2 - Debian GNU/Linux
+
+   Wi-Fi:          nmtui
+   Microphones:    arecord -c 8 -r 16000 -f S16_LE mics.wav
+   Speaker/jack:   aplay file.wav        (volume: alsamixer, "Speaker")
+   LED ring:       12 APA102 on /dev/spidev0.1, powered by GPIO line LED_PWR_N (active low)
+   Install to eMMC (when booted from SD): sudo respeaker-install-emmc
+
