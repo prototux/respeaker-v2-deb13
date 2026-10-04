@@ -1,0 +1,8 @@
+#!/bin/sh
+# Make the activity LED follow the MMC device the system runs from (SD card
+# or eMMC); the device tree can only name one.
+dev=$(basename "$(readlink -f "$(findmnt -n -o SOURCE /)")")
+case "$dev" in
+	mmcblk*) echo "mmc$(echo "$dev" | sed 's/^mmcblk\([0-9]*\).*/\1/')" \
+		> /sys/class/leds/respeaker2:blue:state2/trigger ;;
+esac

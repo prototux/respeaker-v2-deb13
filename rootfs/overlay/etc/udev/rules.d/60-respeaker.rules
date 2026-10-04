@@ -1,0 +1,4 @@
+# Let members of the "spi" and "gpio" groups drive the LED ring and the
+# header pins without root.
+SUBSYSTEM=="spidev", GROUP="spi", MODE="0660"
+SUBSYSTEM=="gpio", KERNEL=="gpiochip*", GROUP="gpio", MODE="0660"

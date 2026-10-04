@@ -1,0 +1,11 @@
+[Unit]
+Description=Activity LED on the boot device
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/respeaker/activity-led
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
