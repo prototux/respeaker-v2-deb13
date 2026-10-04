@@ -1,0 +1,92 @@
+# Initial mixer levels, as shipped in Seeed's Core v2 image: +33 dB digital
+# gain on the microphone channels, less on the loopback channel (CH8),
+# analog PGAs at 0 dB, output at -1.5 dB. Saved over by alsa-store on
+# shutdown.
+state.seeed8micvoicec {
+	control.1 {
+		iface MIXER
+		name 'CH1 Capture Volume'
+		value 203
+	}
+	control.2 {
+		iface MIXER
+		name 'CH2 Capture Volume'
+		value 203
+	}
+	control.3 {
+		iface MIXER
+		name 'CH3 Capture Volume'
+		value 203
+	}
+	control.4 {
+		iface MIXER
+		name 'CH4 Capture Volume'
+		value 203
+	}
+	control.5 {
+		iface MIXER
+		name 'CH5 Capture Volume'
+		value 203
+	}
+	control.6 {
+		iface MIXER
+		name 'CH6 Capture Volume'
+		value 203
+	}
+	control.7 {
+		iface MIXER
+		name 'CH7 Capture Volume'
+		value 203
+	}
+	control.8 {
+		iface MIXER
+		name 'CH8 Capture Volume'
+		value 170
+	}
+	control.9 {
+		iface MIXER
+		name 'ADC1 PGA Capture Volume'
+		value 0
+	}
+	control.10 {
+		iface MIXER
+		name 'ADC2 PGA Capture Volume'
+		value 0
+	}
+	control.11 {
+		iface MIXER
+		name 'ADC3 PGA Capture Volume'
+		value 0
+	}
+	control.12 {
+		iface MIXER
+		name 'ADC4 PGA Capture Volume'
+		value 0
+	}
+	control.13 {
+		iface MIXER
+		name 'ADC5 PGA Capture Volume'
+		value 0
+	}
+	control.14 {
+		iface MIXER
+		name 'ADC6 PGA Capture Volume'
+		value 0
+	}
+	control.15 {
+		iface MIXER
+		name 'ADC7 PGA Capture Volume'
+		value 0
+	}
+	control.16 {
+		iface MIXER
+		name 'ADC8 PGA Capture Volume'
+		value 0
+	}
+	control.17 {
+		iface MIXER
+		name 'Playback Volume'
+		value.0 21
+		value.1 21
+	}
+}
