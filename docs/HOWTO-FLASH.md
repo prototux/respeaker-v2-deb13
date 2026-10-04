@@ -27,8 +27,10 @@ cd respeaker-v2-deb13
 ./build.sh
 ```
 
-The first build takes a while (kernel, bootloader, Debian). The image ends up
-in `out/`.
+Nothing needs to be downloaded by hand: the build fetches the sources and
+Debian packages itself and checks them against pinned hashes. The first
+build takes a while (kernel, bootloader, Debian). The image ends up in
+`out/`.
 
 ## 2. Write it to the SD card
 

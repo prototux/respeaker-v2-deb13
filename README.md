@@ -48,6 +48,14 @@ space, network access. Everything else runs in a pinned Debian container.
 ./build.sh
 ```
 
+There is nothing to download by hand: the build fetches everything itself
+and checks it against the hashes and commits pinned in
+[`config/versions.env`](config/versions.env). That covers the container
+image, the Linux, U-Boot and OP-TEE sources, a few Armbian kernel patches,
+Seeed's Bluetooth firmware, and the Debian packages (from
+snapshot.debian.org). Downloads are cached in `build/dl/`, so later builds
+work from the cache.
+
 The result is in `out/`:
 
 ```
