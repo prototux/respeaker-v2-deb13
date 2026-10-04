@@ -1,0 +1,13 @@
+[Unit]
+Description=First boot setup (grow root filesystem, SSH host keys)
+ConditionPathExists=!/var/lib/respeaker/firstboot-done
+After=local-fs.target
+Before=ssh.service systemd-user-sessions.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/respeaker/firstboot
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,24 @@
+#!/bin/sh
+# First boot of a freshly written image: grow the root partition and
+# filesystem to the whole disk, give the disk new GPT identifiers (so that
+# two copies of the image never clash) and create the SSH host keys.
+set -eu
+
+root_part=$(findmnt -n -o SOURCE /)
+part=$(basename "$(readlink -f "$root_part")")
+disk=/dev/$(basename "$(readlink -f "/sys/class/block/$part/..")")
+partnum=$(cat "/sys/class/block/$part/partition")
+
+echo "growing $root_part to the end of $disk"
+# The backup GPT is at the end of the image, not of the disk: move it.
+sfdisk --no-reread --no-tell-kernel --relocate gpt-bak-std "$disk"
+sfdisk --no-reread --no-tell-kernel --disk-id "$disk" "$(cat /proc/sys/kernel/random/uuid)"
+sfdisk --no-reread --no-tell-kernel --part-uuid "$disk" "$partnum" "$(cat /proc/sys/kernel/random/uuid)"
+echo ", +" | sfdisk --no-reread --no-tell-kernel -N "$partnum" "$disk"
+partx -u "$disk"
+resize2fs "$root_part"
+
+ssh-keygen -A
+
+mkdir -p /var/lib/respeaker
+touch /var/lib/respeaker/firstboot-done
