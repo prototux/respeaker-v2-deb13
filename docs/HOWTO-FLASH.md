@@ -55,8 +55,9 @@ If the check doesn't print `OK`, write the card again or use another card.
 
 1. Insert the SD card, connect Ethernet / HDMI / serial, then plug the power
    supply into **PWR_IN**.
-2. The board boots the SD card on its own, even with Seeed's factory system
-   still on the eMMC. Nothing on the eMMC is changed at this point.
+2. The board boots the SD card on its own, whatever is on the eMMC: Seeed's
+   factory system, a previous install of this image, or nothing. Nothing on
+   the eMMC is changed at this point.
 3. The first boot takes a bit longer: the system grows to fill the card and
    creates its SSH keys.
 

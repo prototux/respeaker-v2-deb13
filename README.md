@@ -120,16 +120,23 @@ xzcat "$img" | sudo cmp -n "$(xz --robot -l "$img" | awk '/^totals/{print $5}')"
 
 Etcher and Raspberry Pi Imager verify the card on their own.
 
-**How the board picks what to boot.** The RK3229 boot ROM always tries the
-eMMC before the SD card. Two cases:
+**Booting from the SD card.** Insert the card and power on: the board boots
+it whatever the eMMC holds (Seeed's factory system, this image, or nothing),
+and nothing on the eMMC is changed. Only the bootloader that starts the card
+differs, because the RK3229 boot ROM loads the *bootloader* from the eMMC
+when there is one there:
 
-- **The eMMC still has the factory system.** The factory bootloader looks for
-  `/boot/uEnv.txt` on partition 2 of the SD card first. The image provides
-  exactly what it expects, so it boots this SD card's kernel and system.
-  Nothing on the eMMC is changed. The DRAM then runs at the factory loader's
-  speed, and the Rockchip TEE stays in use.
-- **The eMMC holds this image, or is empty.** This image's own bootloader
-  runs. It prefers the SD card when one is inserted, then the eMMC.
+- **Factory system on the eMMC:** Seeed's bootloader starts. It looks for
+  `/boot/uEnv.txt` on the SD card first, which this image provides, so it
+  boots the card's kernel and system. The DRAM then runs at the factory
+  loader's speed, and the Rockchip TEE stays in use.
+- **This image on the eMMC:** its bootloader starts and boots the SD card when
+  one is inserted, the eMMC otherwise.
+- **Empty eMMC:** the boot ROM loads this image's bootloader from the card
+  itself.
+
+The one case where the card is ignored is a broken bootloader on the eMMC;
+see "Unbootable eMMC loader" below.
 
 **Installing to the eMMC**, from the system booted off the SD card:
 
