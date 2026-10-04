@@ -1,0 +1,3 @@
+# SPDX-License-Identifier: GPL-2.0-only
+snd-soc-ac108-y := ac108.o
+obj-m += snd-soc-ac108.o
